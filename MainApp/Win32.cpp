@@ -84,7 +84,7 @@ static constexpr size_t ID_TIMER_DC = 1;
 static constexpr size_t ID_TIMER_UNKNOWN = 2;
 UINT_PTR g_timers[3] = {};
 UINT_PTR g_sendSt[3] = {};
-UINT g_timethres = 1000;
+UINT g_timethres = 60 * 1000;
 bool g_ErrorSent = false;
 bool g_DcSent = false;
 
