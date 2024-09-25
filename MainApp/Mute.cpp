@@ -35,24 +35,72 @@
 
 namespace {
 
+struct MSCOM_DELETER {
+	void operator()(IUnknown* object) const {
+		object->Release();
+	}
+};
+
+class MSCOM_RECEIVER {
+public:
+	MSCOM_RECEIVER() :
+		m_pointer(nullptr) {}
+
+	~MSCOM_RECEIVER() {
+		if (m_pointer)
+			m_pointer->Release();
+	}
+
+	template<typename _Ty>
+	_Ty** ready() {
+		return (_Ty**)&m_pointer;
+	}
+
+	template<typename _T2>
+	operator _T2() {
+		_T2 res = (_T2)m_pointer;
+		m_pointer = nullptr;
+		return res;
+	}
+
+	template<typename _Tt, typename _Tf>
+	HRESULT QueryInterfaceFrom(_Tf& f) {
+		return f->QueryInterface<_Tt>((_Tt**)&m_pointer);
+	}
+
+	template<typename _Ty>
+	std::unique_ptr<_Ty, MSCOM_DELETER> get() {
+		return std::unique_ptr<_Ty, MSCOM_DELETER>((_Ty*)(*this), MSCOM_DELETER());
+	}
+
+	template<typename _Ty>
+	std::shared_ptr<_Ty> get_shared() {
+		return std::shared_ptr<_Ty>((_Ty*)(*this), MSCOM_DELETER());
+	}
+
+protected:
+	IUnknown* m_pointer;
+};
+
 static const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 static const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 static const IID IID_IAudioSessionManager2 = __uuidof(IAudioSessionManager2);
 
 DWORD pid = NULL;
 
-void DoSessionCtrl(IAudioSessionControl* pSessionCtrl) {
-	HRESULT hr = {};
-	IAudioSessionControl2* ctrl = nullptr;
-	hr = pSessionCtrl->QueryInterface<IAudioSessionControl2>(&ctrl);
-	if (hr != S_OK)
+void DoSessionCtrl(std::shared_ptr<IAudioSessionControl> pSessionCtrl) {
+	MSCOM_RECEIVER receiver;
+
+	if (S_OK != receiver.QueryInterfaceFrom<IAudioSessionControl2>(pSessionCtrl))
 		return;
-	if (ctrl->IsSystemSoundsSession() == S_OK) // 不操作系统会话
+	auto ctrl = receiver.get<IAudioSessionControl2>();
+	if (S_OK == ctrl->IsSystemSoundsSession()) // 不操作系统会话
 		return;
-	ISimpleAudioVolume* vol = nullptr;
-	hr = pSessionCtrl->QueryInterface<ISimpleAudioVolume>(&vol);
-	if (hr != S_OK)
+
+	if (S_OK != receiver.QueryInterfaceFrom<ISimpleAudioVolume>(pSessionCtrl))
 		return;
+	auto vol = receiver.get<ISimpleAudioVolume>();
+
 	DWORD apid = NULL;
 	if (ctrl->GetProcessId(&apid) != S_OK)
 		return;
@@ -65,57 +113,51 @@ void DoSessionCtrl(IAudioSessionControl* pSessionCtrl) {
 	return;
 }
 
-void DeviceEnumSession(IMMDevice* pDevice) {
-	HRESULT hr = {};
-	IAudioSessionManager2* pSessionMngr = nullptr;
-	hr = pDevice->Activate(IID_IAudioSessionManager2, CLSCTX_ALL, NULL, (void**)&pSessionMngr);
-	if (hr != S_OK)
+void DeviceEnumSession(std::shared_ptr<IMMDevice> pDevice) {
+	MSCOM_RECEIVER receiver;
+
+	if (S_OK != pDevice->Activate(IID_IAudioSessionManager2, CLSCTX_ALL, NULL, receiver.ready<void>()))
 		return;
-	IAudioSessionEnumerator* pSessionEnum = nullptr;
-	hr = pSessionMngr->GetSessionEnumerator(&pSessionEnum);
-	if (hr == S_OK) {
-		int cnt = 0;
-		hr = pSessionEnum->GetCount(&cnt);
-		if (hr == S_OK) {
-			for (int i = 0; i < cnt; ++i) {
-				IAudioSessionControl* pSessionCtrl = nullptr;
-				hr = pSessionEnum->GetSession(i, &pSessionCtrl);
-				if (hr == S_OK)
-					DoSessionCtrl(pSessionCtrl);
-				if (pSessionCtrl)
-					pSessionCtrl->Release();
-			}
-		}
-		pSessionEnum->Release();
+	auto pSessionMngr = receiver.get<IAudioSessionManager2>();
+
+	if (S_OK != pSessionMngr->GetSessionEnumerator(receiver.ready<IAudioSessionEnumerator>()))
+		return;
+	auto pSessionEnum = receiver.get<IAudioSessionEnumerator>();
+
+	int cnt = 0;
+	if (S_OK != pSessionEnum->GetCount(&cnt))
+		return;
+	for (int i = 0; i < cnt; ++i) {
+		if (S_OK != pSessionEnum->GetSession(i, receiver.ready<IAudioSessionControl>()))
+			continue;
+		auto pSessionCtrl = receiver.get_shared<IAudioSessionControl>();
+		DoSessionCtrl(pSessionCtrl);
 	}
-	pSessionMngr->Release();
+
+	return;
 }
 
 void EnumDevice() {
-	HRESULT hr = {};
-	IMMDeviceEnumerator* pDevEnum = nullptr;
-	hr = CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, IID_IMMDeviceEnumerator, (void**)&pDevEnum);
-	if (hr != S_OK)
+	MSCOM_RECEIVER receiver;
+
+	if (S_OK != CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, IID_IMMDeviceEnumerator, receiver.ready<void>()))
 		return;
-	IMMDeviceCollection* pDevCol = nullptr;
-	hr = pDevEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, &pDevCol);
-	if (hr == S_OK) {
-		UINT cnt = 0;
-		hr = pDevCol->GetCount(&cnt);
-		if (hr == S_OK) {
-			for (UINT i = 0; i < cnt; ++i) {
-				IMMDevice* pDevice = nullptr;
-				hr = pDevCol->Item(i, &pDevice);
-				if (hr == S_OK)
-					DeviceEnumSession(pDevice);
-				if (pDevice)
-					pDevice->Release();
-			}
-		}
+	auto pDevEnum = receiver.get<IMMDeviceEnumerator>();
+
+	if (S_OK != pDevEnum->EnumAudioEndpoints(eRender, DEVICE_STATE_ACTIVE, receiver.ready<IMMDeviceCollection>()))
+		return;
+	auto pDevCol = receiver.get<IMMDeviceCollection>();
+
+	UINT cnt = 0;
+	if (S_OK != pDevCol->GetCount(&cnt))
+		return;
+	for (UINT i = 0; i < cnt; ++i) {
+		if (S_OK != pDevCol->Item(i, receiver.ready<IMMDevice>()))
+			continue;
+		auto pDevice = receiver.get_shared<IMMDevice>();
+		DeviceEnumSession(pDevice);
 	}
-	if (pDevCol)
-		pDevCol->Release();
-	pDevEnum->Release();
+
 	return;
 }
 
