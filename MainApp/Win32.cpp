@@ -108,6 +108,17 @@ UINT VkFromCode(WORD wHotkey) {
 	return LOBYTE(wHotkey);
 }
 
+void TestSender() {
+	SHELLEXECUTEINFOW info{};
+
+	info.cbSize = sizeof(info);
+	info.lpVerb = L"open";
+	info.lpFile = szSenderPath;
+	info.lpParameters = L"--test";
+	ShellExecuteExW(&info);
+	return;
+}
+
 void Send(std::wstring_view title, std::wstring_view text) {
 	if (!isRunning || !isPowerSirenRunning)
 		return;
@@ -619,6 +630,8 @@ bool MyRegisterClass(HINSTANCE hInst) {
 }
 
 HWND MyCreateWindow(HINSTANCE hInst, int nCmdShow) {
+	TestSender();
+
 	HWND hWnd = CreateWindowExW(
 		WS_EX_APPWINDOW,
 		szWindowClass, szTitle,
