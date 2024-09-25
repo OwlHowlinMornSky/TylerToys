@@ -18,7 +18,7 @@ namespace Sender {
 					$"Port: \"{smtpPort}\",\r\n" +
 					$"Username: \"{smtpUsername}\",\r\n" +
 					$"Password: \"{smtpPassword}\".",
-					"TylerToys.Sender: Failed to Send Email",
+					"TylerToys.Sender: Unable to Send Email",
 					MessageBoxButtons.OK,
 					MessageBoxIcon.Error
 				);
