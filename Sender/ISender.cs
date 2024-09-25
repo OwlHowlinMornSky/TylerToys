@@ -1,5 +1,6 @@
 ﻿namespace Sender {
 	internal interface ISender {
-		internal abstract int Send(string toAddr, string subject, string body);
+		public abstract int Test();
+		public abstract int Send(string toAddr, string subject, string body);
 	}
 }

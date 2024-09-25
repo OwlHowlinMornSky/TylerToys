@@ -6,7 +6,12 @@
 			string body = "";
 
 			string lastCtrl = "";
+			bool test = false;
 			foreach (string arg in args) {
+				if (arg == "--test") {
+					test = true;
+					break;
+				}
 				if (string.IsNullOrEmpty(lastCtrl)) {
 					switch (arg) {
 					case "-to":
@@ -54,10 +59,15 @@
 				}
 			}
 
+			ISender sender = new SmtpSender();
+			if (test) {
+				sender.Test();
+				return;
+			}
+
 			if (string.IsNullOrEmpty(subject) && string.IsNullOrEmpty(body))
 				return;
 
-			ISender sender = new SmtpSender();
 			sender.Send(
 				toAddr,
 				subject,
