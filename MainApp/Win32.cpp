@@ -241,8 +241,10 @@ void Run(HWND hWnd) {
 		}
 	}
 
-	if (RegistrySettings::instance()->IsPowerSirenEnabled())
+	if (RegistrySettings::instance()->IsPowerSirenEnabled()) {
+		TestSender();
 		isPowerSirenRunning = true;
+	}
 
 	MySetKeepDisplay(
 		RegistrySettings::instance()->IsDisplayKeeperEnabled(),
@@ -630,8 +632,6 @@ bool MyRegisterClass(HINSTANCE hInst) {
 }
 
 HWND MyCreateWindow(HINSTANCE hInst, int nCmdShow) {
-	TestSender();
-
 	HWND hWnd = CreateWindowExW(
 		WS_EX_APPWINDOW,
 		szWindowClass, szTitle,
