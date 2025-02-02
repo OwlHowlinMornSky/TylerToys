@@ -19,7 +19,6 @@
 *    Tyler Parret True <mysteryworldgod@outlook.com><https://github.com/OwlHowlinMornSky>
 */
 #include <format>
-#include <deque>
 
 #include "Win32.h"
 
@@ -77,10 +76,6 @@ bool isMuteHotKeyRunning = false;
 
 HWND hBoxPowerSiren = NULL;
 HWND hBtnPowerSirenSettingEnabled = NULL;
-
-HWND hBoxHideWindow = NULL;
-HWND hBtnHideWindow = NULL;
-HWND hBtnHideCancel = NULL;
 
 bool isPowerSirenRunning = false;
 
@@ -277,24 +272,6 @@ void OnWindowDestroy(HWND hWnd) {
 }
 
 ContextMenu g_contextMenu;
-std::deque<HWND> g_hidedWindows;
-WNDPROC GpboxProc;
-LRESULT CALLBACK GroupboxButtonForwardProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-	if (msg == WM_COMMAND || msg == WM_NOTIFY) {
-		SendMessageW(GetParent(hWnd), msg, wParam, lParam);
-	}
-	return CallWindowProcW(GpboxProc, hWnd, msg, wParam, lParam);
-}
-bool g_capturing = false;
-WNDPROC BtnProc;
-LRESULT CALLBACK ButtonCaptureProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-	if (msg == WM_LBUTTONDOWN) {
-		g_capturing = true;
-		SetCapture(GetParent(GetParent(hWnd)));
-		return 0;
-	}
-	return CallWindowProcW(GpboxProc, hWnd, msg, wParam, lParam);
-}
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 	switch (message) {
@@ -324,7 +301,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			0,
 			WC_BUTTONW, szMainBtnRun,
 			WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-			270, 185, 100, 40,
+			270, 120, 100, 40,
 			hWnd, NULL, GetModuleHandleW(NULL), NULL
 		);
 		SendMessageW(hBtnMain, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
@@ -333,7 +310,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			0,
 			WC_BUTTONW, szHideOnStarting,
 			WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
-			10, 195, 240, 20,
+			10, 190, 240, 20,
 			hWnd, NULL, GetModuleHandleW(NULL), NULL
 		);
 		SendMessageW(hBtnSettingHideOnStarting, WM_SETFONT, (WPARAM)hFontText, TRUE);
@@ -417,39 +394,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			SendMessageW(hBtnDisplayKeeperSettingEnabled, WM_SETFONT, (WPARAM)hFontText, TRUE);
 		}
 
-		{
-			hBoxHideWindow = CreateWindowExW(
-				0,
-				WC_BUTTONW, L"Hide Window",
-				WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_GROUPBOX,
-				220, 100, 200, 80,
-				hWnd, NULL, GetModuleHandleW(NULL), NULL
-			);
-			SendMessageW(hBoxHideWindow, WM_SETFONT, (WPARAM)hFontTitle, TRUE);
-
-			GpboxProc = (WNDPROC)SetWindowLongPtrW(hBoxHideWindow, GWLP_WNDPROC, (LONG_PTR)&GroupboxButtonForwardProc);
-
-			hBtnHideWindow = CreateWindowExW(
-				0,
-				WC_BUTTONW, L"",
-				WS_TABSTOP | WS_VISIBLE | WS_CHILD,
-				15, 25, 100, 20,
-				hBoxHideWindow, (HMENU)40002, GetModuleHandleW(NULL), NULL
-			);
-			SendMessageW(hBtnHideWindow, WM_SETFONT, (WPARAM)hFontText, TRUE);
-
-			BtnProc = (WNDPROC)SetWindowLongPtrW(hBtnHideWindow, GWLP_WNDPROC, (LONG_PTR)&ButtonCaptureProc);
-
-			hBtnHideCancel = CreateWindowExW(
-				0,
-				WC_BUTTONW, L"Cancel All",
-				WS_TABSTOP | WS_VISIBLE | WS_CHILD,
-				15, 50, 100, 20,
-				hBoxHideWindow, (HMENU)40003, GetModuleHandleW(NULL), NULL
-			);
-			SendMessageW(hBtnHideCancel, WM_SETFONT, (WPARAM)hFontText, TRUE);
-		}
-
 		InitGuiFromSettings();
 
 		if (RegistrySettings::instance()->IsHideWindowOnStarting()) {
@@ -459,8 +403,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
 	case WM_DESTROY:
 		OnWindowDestroy(hWnd);
-
-		DestroyWindow(hBoxHideWindow);
 
 		DestroyWindow(hBoxKeeper);
 
@@ -481,30 +423,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 		PostQuitMessage(0);
 		break;
 
-	case WM_LBUTTONUP:
-		if (g_capturing) {
-			g_capturing = false;
-			ReleaseCapture();
-
-			POINTS pts = MAKEPOINTS(lParam);
-			POINT pt = { pts.x, pts.y };
-			ClientToScreen(hWnd, &pt);
-
-			HWND hhh = WindowFromPoint(pt);
-			//hhh = GetWindow(hhh, GA_ROOT);
-
-			//WCHAR sdf[260];
-			//GetWindowTextW(hhh, sdf, 255);
-
-			if (hhh != NULL && hhh != hWnd) {
-				SetWindowPos(hhh, HWND_BOTTOM, -32000, -32000, 0, 0, SWP_NOACTIVATE | SWP_NOSIZE | SWP_SHOWWINDOW);
-				g_hidedWindows.emplace_back(hhh);
-				break;
-			}
-		}
-		return DefWindowProcW(hWnd, message, wParam, lParam);
-		break;
-
 	case WM_COMMAND:
 		if (HIWORD(wParam) == BN_CLICKED) {
 			if ((HWND)lParam == hBtnMain) {
@@ -512,18 +430,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 			}
 			else if (LOWORD(wParam) == ContextMenu::Exit) {
 				PostMessageW(hWnd, WM_CLOSE, NULL, NULL);
-			}
-			else if (LOWORD(wParam) == 40003) {
-				RECT ar{};
-				SystemParametersInfoW(SPI_GETWORKAREA, 0, &ar, 0);
-				for (auto& h : g_hidedWindows) {
-					RECT rect{};
-					GetWindowRect(h, &rect);
-					rect.left = (ar.right - ar.left - rect.right + rect.left) / 2;
-					rect.top = (ar.bottom - ar.top - rect.bottom + rect.top) / 2;
-					SetWindowPos(h, NULL, rect.left, rect.top, 0, 0, SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOSIZE | SWP_SHOWWINDOW);
-				}
-				g_hidedWindows.clear();
 			}
 		}
 		break;
