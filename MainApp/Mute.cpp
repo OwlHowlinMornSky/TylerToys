@@ -18,6 +18,12 @@
 * @Authors
 *    Tyler Parret True <mysteryworldgod@outlook.com><https://github.com/OwlHowlinMornSky>
 */
+/*
+* 
+* https://cloud.tencent.com/developer/article/2350174
+* https://learn.microsoft.com/zh-cn/windows/win32/api/winuser/nf-winuser-setwineventhook
+* 
+*/
 #include "framework.h"
 
 #include <combaseapi.h>
@@ -86,15 +92,13 @@ static const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 static const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
 static const IID IID_IAudioSessionManager2 = __uuidof(IAudioSessionManager2);
 
-DWORD pid = NULL;
-
-void DoSessionCtrl(std::shared_ptr<IAudioSessionControl> pSessionCtrl) {
+void DoSessionCtrl(std::shared_ptr<IAudioSessionControl> pSessionCtrl, DWORD pid, bool type = false) {
 	MSCOM_RECEIVER receiver;
 
 	if (S_OK != receiver.QueryInterfaceFrom<IAudioSessionControl2>(pSessionCtrl))
 		return;
 	auto ctrl = receiver.get<IAudioSessionControl2>();
-	if (S_OK == ctrl->IsSystemSoundsSession()) // 不操作系统会话
+	if (type == false && S_OK == ctrl->IsSystemSoundsSession()) // 不操作系统会话
 		return;
 
 	if (S_OK != receiver.QueryInterfaceFrom<ISimpleAudioVolume>(pSessionCtrl))
@@ -104,16 +108,24 @@ void DoSessionCtrl(std::shared_ptr<IAudioSessionControl> pSessionCtrl) {
 	DWORD apid = NULL;
 	if (ctrl->GetProcessId(&apid) != S_OK)
 		return;
-	if (apid != pid)
-		return;
-	BOOL muted = {};
-	if (vol->GetMute(&muted) != S_OK)
-		return;
-	vol->SetMute(!muted, NULL);
+	if (type == false) {
+		if (apid != pid)
+			return;
+		BOOL muted = {};
+		if (vol->GetMute(&muted) != S_OK)
+			return;
+		vol->SetMute(!muted, NULL);
+	}
+	else {
+		if (apid != pid)
+			vol->SetMute(TRUE, NULL);
+		else
+			vol->SetMute(FALSE, NULL);
+	}
 	return;
 }
 
-void DeviceEnumSession(std::shared_ptr<IMMDevice> pDevice) {
+void DeviceEnumSession(std::shared_ptr<IMMDevice> pDevice, DWORD pid, bool type = false) {
 	MSCOM_RECEIVER receiver;
 
 	if (S_OK != pDevice->Activate(IID_IAudioSessionManager2, CLSCTX_ALL, NULL, receiver.ready<void>()))
@@ -131,13 +143,13 @@ void DeviceEnumSession(std::shared_ptr<IMMDevice> pDevice) {
 		if (S_OK != pSessionEnum->GetSession(i, receiver.ready<IAudioSessionControl>()))
 			continue;
 		auto pSessionCtrl = receiver.get_shared<IAudioSessionControl>();
-		DoSessionCtrl(pSessionCtrl);
+		DoSessionCtrl(pSessionCtrl, pid, type);
 	}
 
 	return;
 }
 
-void EnumDevice() {
+void EnumDevice(DWORD pid, bool type = false) {
 	MSCOM_RECEIVER receiver;
 
 	if (S_OK != CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, IID_IMMDeviceEnumerator, receiver.ready<void>()))
@@ -155,13 +167,14 @@ void EnumDevice() {
 		if (S_OK != pDevCol->Item(i, receiver.ready<IMMDevice>()))
 			continue;
 		auto pDevice = receiver.get_shared<IMMDevice>();
-		DeviceEnumSession(pDevice);
+		DeviceEnumSession(pDevice, pid, type);
 	}
 
 	return;
 }
 
 std::unique_ptr<MuteWindow> g_instance;
+std::unique_ptr<OnlyForeground> g_instfore;
 
 bool InitCOM() {
 	HRESULT hr = {};
@@ -192,7 +205,7 @@ void DropCOM() {
 
 MuteWindow* MuteWindow::instance() {
 	if (nullptr == g_instance) {
-		if (false == InitCOM()) {
+		if (nullptr == g_instfore && false == InitCOM()) {
 			return nullptr;
 		}
 		g_instance = std::unique_ptr<MuteWindow>(new MuteWindow());
@@ -210,11 +223,48 @@ void MuteWindow::TryMuteOrUnmuteForegroundWindow() {
 	HWND hwnd = GetForegroundWindow();
 	if (hwnd == NULL)
 		return;
-	pid = NULL;
+	DWORD pid = NULL;
 	if (GetWindowThreadProcessId(hwnd, &pid) == 0)
 		return;
 	try {
-		EnumDevice();
+		EnumDevice(pid);
+	}
+	catch (std::exception& e) {
+		MessageBoxA(NULL, e.what(), (AppNameA + ": Exception").data(), MB_ICONERROR);
+	}
+	catch (int code) {
+		MessageBoxA(NULL, ("Code: " + std::to_string(code)).data(), (AppNameA + ": Exception").data(), MB_ICONERROR);
+	}
+	catch (...) {
+		MessageBoxA(NULL, "Unknown Exception.", (AppNameA + ": Exception").data(), MB_ICONERROR);
+	}
+	pid = NULL;
+	return;
+}
+
+OnlyForeground* OnlyForeground::instance() {
+	if (nullptr == g_instance) {
+		if (nullptr == g_instance && false == InitCOM()) {
+			return nullptr;
+		}
+		g_instfore = std::unique_ptr<OnlyForeground>(new OnlyForeground());
+	}
+	return g_instfore.get();
+}
+
+OnlyForeground::OnlyForeground() {}
+
+OnlyForeground::~OnlyForeground() {}
+
+void OnlyForeground::Trigger() {
+	HWND hwnd = GetForegroundWindow();
+	if (hwnd == NULL)
+		return;
+	DWORD pid = NULL;
+	if (GetWindowThreadProcessId(hwnd, &pid) == 0)
+		return;
+	try {
+		EnumDevice(pid, true);
 	}
 	catch (std::exception& e) {
 		MessageBoxA(NULL, e.what(), (AppNameA + ": Exception").data(), MB_ICONERROR);

@@ -32,3 +32,17 @@ public:
 
 	void TryMuteOrUnmuteForegroundWindow();
 };
+
+
+class OnlyForeground final {
+public:
+	static OnlyForeground* instance();
+
+private:
+	OnlyForeground();
+
+public:
+	~OnlyForeground();
+
+	void Trigger();
+};

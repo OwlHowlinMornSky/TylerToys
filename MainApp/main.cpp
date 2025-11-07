@@ -51,6 +51,8 @@ int APIENTRY wWinMain(
 		return 1;
 	}
 
+	MySetEventProc();
+
 	HPOWERNOTIFY hPN = RegisterPowerSettingNotification(hwnd, &GUID_ACDC_POWER_SOURCE, DEVICE_NOTIFY_WINDOW_HANDLE);
 
 	MSG msg = {};

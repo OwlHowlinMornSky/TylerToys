@@ -28,6 +28,8 @@ bool MyRegisterClass(HINSTANCE hInst);
 
 HWND MyCreateWindow(HINSTANCE hInst, int nCmdShow);
 
+void MySetEventProc();
+
 /**
  * @brief 添加托盘图标
  * @param hInst 当前实例

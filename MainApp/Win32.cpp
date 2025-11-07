@@ -582,6 +582,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 	return 0;
 }
 
+void MyWinEventProc(
+	HWINEVENTHOOK hWinEventHook,
+	DWORD event,
+	HWND hwnd,
+	LONG idObject,
+	LONG idChild,
+	DWORD idEventThread,
+	DWORD dwmsEventTime
+) {
+	auto i = OnlyForeground::instance();
+	if (i == nullptr)
+		return;
+	i->Trigger();
+}
+
 } // namespace
 
 void MyLoadString(HINSTANCE hInst) {
@@ -644,6 +659,17 @@ HWND MyCreateWindow(HINSTANCE hInst, int nCmdShow) {
 	ShowWindow(hWnd, RegistrySettings::instance()->IsHideWindowOnStarting() ? SW_HIDE : nCmdShow);
 	UpdateWindow(hWnd);
 	return hWnd;
+}
+
+void MySetEventProc() {
+	SetWinEventHook(
+		EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+		NULL, MyWinEventProc, 0, 0, WINEVENT_OUTOFCONTEXT
+	);
+	auto i = OnlyForeground::instance();
+	if (i == nullptr)
+		return;
+	i->Trigger();
 }
 
 bool MyAddNotifyIcon(HINSTANCE hInst, HWND hWnd) {
